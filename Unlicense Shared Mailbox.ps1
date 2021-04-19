@@ -34,16 +34,17 @@ foreach ($customer in $customers) {
     $InitialDomain = Get-MsolDomain -TenantId $customer.TenantId | Where-Object {$_.IsInitial -eq $true}
     $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "https://ps.outlook.com/powershell-liveid?DelegatedOrg=$($InitialDomain)&BasicAuthToOAuthConversion=true" -Credential $credential -Authentication Basic -AllowRedirection -ErrorAction SilentlyContinue
     Import-PSSession $session 
-    $sharedMailboxes = Get-Mailbox -ResultSize Unlimited -Filter {recipienttypedetails -eq "SharedMailbox"}
+    $sharedMailboxes = Get-Mailbox -ResultSize Unlimited -Filter {recipienttypedetails -eq "SharedMailbox"} | Get-MailboxStatistics | Where-Object {[int64]($PSItem.TotalItemSize.Value -replace '.+\(|bytes\)') -lt "50GB"}
     Remove-PSSession $session
     foreach ($mailbox in $sharedMailboxes) {
-        if ($licensedUsers.ObjectId -contains $mailbox.ExternalDirectoryObjectID) {
+        if ($licensedUsers.displayName -contains $mailbox.displayName) {
             Write-Host "$($mailbox.displayname) is a licensed shared mailbox" -ForegroundColor Yellow
-            $licenses = ($licensedUsers | Where-Object {$_.objectid -contains $mailbox.ExternalDirectoryObjectId}).Licenses
+            $user = ($licensedUsers | Where-Object {$_.displayName -contains $mailbox.displayName})
+            $licenses = ($licensedUsers | Where-Object {$_.displayName -contains $mailbox.displayName}).Licenses
             $licenseArray = $licenses | foreach-Object {$_.AccountSkuId}
             Write-Host "Removing License" -ForegroundColor Yellow
             $mailbox | ForEach-Object {
-            Set-MsolUserLicense -UserPrincipalName "$($mailbox.UserPrincipalName)" -TenantId $($customer.TenantId) -removelicenses $licenseArray -ErrorAction SilentlyContinue
+            Set-MsolUserLicense -UserPrincipalName "$($user.UserPrincipalName)" -TenantId $($customer.TenantId) -removelicenses $licenseArray -ErrorAction SilentlyContinue
             } 
 
 }
